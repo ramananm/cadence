@@ -360,6 +360,8 @@ const (
 	HistoryRequestCancelWorkflowExecutionScope
 	// HistoryReplicateEventsScope tracks ReplicateEvents API calls received by service
 	HistoryReplicateEventsScope
+	// HistoryReplicateLoadMutableStateScope is the scope used by shard controller
+	HistoryReplicateLoadMutableStateScope
 	// HistoryShardControllerScope is the scope used by shard controller
 	HistoryShardControllerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -598,6 +600,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRecordChildExecutionCompletedScope:    {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:   {operation: "RequestCancelWorkflowExecution"},
 		HistoryReplicateEventsScope:                  {operation: "ReplicateEvents"},
+		HistoryReplicateLoadMutableStateScope:        {operation: "LoadMutableState"},
 		HistoryShardControllerScope:                  {operation: "ShardController"},
 		TransferQueueProcessorScope:                  {operation: "TransferQueueProcessor"},
 		TransferActiveQueueProcessorScope:            {operation: "TransferActiveQueueProcessor"},

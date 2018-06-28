@@ -140,7 +140,10 @@ func (r *historyReplicator) ApplyEvents(request *h.ReplicateEventsRequest) (retE
 	}
 
 	execution := *request.WorkflowExecution
+	r.metricsClient.IncCounter(metrics.HistoryReplicateLoadMutableStateScope, metrics.CadenceRequests)
+	sw := r.metricsClient.StartTimer(metrics.HistoryReplicateLoadMutableStateScope, metrics.CadenceLatency)
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(domainID, execution)
+	sw.Stop()
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError
@@ -727,11 +730,14 @@ func (r *historyReplicator) Serialize(history *shared.History) (*persistence.Ser
 
 func (r *historyReplicator) getCurrentWorkflowInfo(domainID string, workflowID string) (runID string, lastWriteVersion int64, closeStatus int, retError error) {
 	// we need to check the current workflow execution
+	r.metricsClient.IncCounter(metrics.HistoryReplicateLoadMutableStateScope, metrics.CadenceRequests)
+	sw := r.metricsClient.StartTimer(metrics.HistoryReplicateLoadMutableStateScope, metrics.CadenceLatency)
 	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
 		domainID,
 		// only use the workflow ID, to get the current running one
 		shared.WorkflowExecution{WorkflowId: common.StringPtr(workflowID)},
 	)
+	sw.Stop()
 	if err != nil {
 		return "", common.EmptyVersion, persistence.WorkflowCloseStatusNone, err
 	}
