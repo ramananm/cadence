@@ -349,10 +349,22 @@ func (c *taskListManagerImpl) Stop() {
 	}
 	close(c.deliverBufferShutdownCh)
 	c.cancelFunc()
+	c.drainTaskList()
 	close(c.shutdownCh)
 	c.taskWriter.Stop()
 	c.engine.removeTaskListManager(c.taskListID)
 	logging.LogTaskListUnloadedEvent(c.logger)
+}
+
+func (c *taskListManagerImpl) drainTaskList() {
+loop:
+	for {
+		select {
+		case <-c.tasksForPoll:
+		default:
+			break loop
+		}
+	}
 }
 
 func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error {
