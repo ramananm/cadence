@@ -283,7 +283,13 @@ ProcessRetryLoop:
 			if err != nil {
 				if err == ErrTaskRetry {
 					p.metricsClient.IncCounter(p.options.MetricScope, metrics.HistoryTaskStandbyRetryCounter)
-					<-notificationChan
+				DelayLoop:
+					for {
+						<-notificationChan
+						if time.Now().Sub(startTime) > p.shard.GetConfig().StandbyClusterDelay() {
+							break DelayLoop
+						}
+					}
 				} else {
 					logging.LogTaskProcessingFailedEvent(logger, err)
 

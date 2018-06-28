@@ -237,7 +237,7 @@ func (e *historyEngineImpl) registerDomainFailoverCallback() {
 				// its length > 0 and has correct timestamp, to trkgger a db scan
 				fakeDecisionTask := []persistence.Task{&persistence.DecisionTask{}}
 				fakeDecisionTimeoutTask := []persistence.Task{&persistence.DecisionTimeoutTask{VisibilityTimestamp: now}}
-				e.txProcessor.NotifyNewTask(e.currentClusterName, now, fakeDecisionTask)
+				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeDecisionTask)
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, now, fakeDecisionTimeoutTask)
 			})
 			e.shard.UpdateDomainNotificationVersion(nextDomain.GetNotificationVersion() + 1)
@@ -2382,7 +2382,7 @@ func (e *historyEngineImpl) getTimerBuilder(we *workflow.WorkflowExecution) *tim
 func (s *shardContextWrapper) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) error {
 	err := s.ShardContext.UpdateWorkflowExecution(request)
 	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName), request.TransferTasks)
+		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}
@@ -2394,7 +2394,7 @@ func (s *shardContextWrapper) CreateWorkflowExecution(request *persistence.Creat
 	*persistence.CreateWorkflowExecutionResponse, error) {
 	resp, err := s.ShardContext.CreateWorkflowExecution(request)
 	if err == nil {
-		s.txProcessor.NotifyNewTask(s.currentClusterName, s.GetCurrentTime(s.currentClusterName), request.TransferTasks)
+		s.txProcessor.NotifyNewTask(s.currentClusterName, request.TransferTasks)
 		if len(request.ReplicationTasks) > 0 {
 			s.replcatorProcessor.notifyNewTask()
 		}

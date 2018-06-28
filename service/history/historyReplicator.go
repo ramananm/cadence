@@ -771,7 +771,8 @@ func (r *historyReplicator) terminateWorkflow(domainID string, workflowID string
 
 func (r *historyReplicator) notify(clusterName string, now time.Time, transferTasks []persistence.Task,
 	timerTasks []persistence.Task) {
+	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
 	r.shard.SetCurrentTime(clusterName, now)
-	r.historyEngine.txProcessor.NotifyNewTask(clusterName, now, transferTasks)
+	r.historyEngine.txProcessor.NotifyNewTask(clusterName, transferTasks)
 	r.historyEngine.timerProcessor.NotifyNewTimers(clusterName, now, timerTasks)
 }
