@@ -51,6 +51,8 @@ const (
 const (
 	_defaultTaskDispatchRPS    = 100000.0
 	_defaultTaskDispatchRPSTTL = 60 * time.Second
+
+	maxAddTasksIdleTime = 5 * time.Minute
 )
 
 var errAddTasklistThrottled = errors.New("cannot add to tasklist, limit exceeded")
@@ -306,6 +308,9 @@ type taskListManagerImpl struct {
 	rateLimiter *rateLimiter
 
 	taskListKind *s.TaskListKind // sticky taskList has different process in persistence
+
+	lastAddTaskTimeLock sync.Mutex
+	lastAddTaskTime     time.Time // last time when adding task
 }
 
 // getTaskResult contains task info and optional channel to notify createTask caller
@@ -357,6 +362,7 @@ func (c *taskListManagerImpl) Stop() {
 
 func (c *taskListManagerImpl) AddTask(execution *s.WorkflowExecution, taskInfo *persistence.TaskInfo) error {
 	c.startWG.Wait()
+	c.updateLastAddTaskTime()
 	_, err := c.executeWithRetry(func(rangeID int64) (interface{}, error) {
 		r, err := c.trySyncMatch(taskInfo)
 		if (err != nil && err != errAddTasklistThrottled) || r != nil {
@@ -738,7 +744,7 @@ func (c *taskListManagerImpl) getTasksPump() {
 
 	go c.deliverBufferTasksForPoll()
 	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval())
-	checkPollerTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
+	checkIdleTaskListTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
 getTasksPumpLoop:
 	for {
 		select {
@@ -792,19 +798,19 @@ getTasksPumpLoop:
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
 				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval())
 			}
-		case <-checkPollerTimer.C:
+		case <-checkIdleTaskListTimer.C:
 			{
 				pollers := c.GetAllPollerInfo()
-				if len(pollers) == 0 {
+				if len(pollers) == 0 && !c.isTaskAddedRecently() {
 					c.Stop()
 				}
-				checkPollerTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
+				checkIdleTaskListTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
 			}
 		}
 	}
 
 	updateAckTimer.Stop()
-	checkPollerTimer.Stop()
+	checkIdleTaskListTimer.Stop()
 }
 
 // Retry operation on transient error and on rangeID change. On rangeID update by another process calls c.Stop().
@@ -948,4 +954,17 @@ func (c *taskContext) completeTask(err error) {
 
 func createServiceBusyError(msg string) *s.ServiceBusyError {
 	return &s.ServiceBusyError{Message: msg}
+}
+
+func (c *taskListManagerImpl) updateLastAddTaskTime() {
+	c.lastAddTaskTimeLock.Lock()
+	c.lastAddTaskTime = time.Now()
+	c.lastAddTaskTimeLock.Unlock()
+}
+
+func (c *taskListManagerImpl) isTaskAddedRecently() bool {
+	c.lastAddTaskTimeLock.Lock()
+	res := time.Now().Sub(c.lastAddTaskTime) <= maxAddTasksIdleTime
+	c.lastAddTaskTimeLock.Unlock()
+	return res
 }
