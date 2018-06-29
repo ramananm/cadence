@@ -343,6 +343,7 @@ func (c *taskListManagerImpl) Start() error {
 	c.taskWriter.Start()
 	c.signalNewTask()
 	go c.getTasksPump()
+	go c.checkIdle()
 
 	return nil
 }
@@ -738,13 +739,35 @@ deliverBufferTasksLoop:
 	}
 }
 
+func (c *taskListManagerImpl) checkIdle() {
+	checkIdleTaskListTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
+
+checkIdleLoop:
+	for {
+		select {
+		case <-c.shutdownCh:
+			break checkIdleLoop
+		case <-checkIdleTaskListTimer.C:
+			{
+				pollers := c.GetAllPollerInfo()
+				if len(pollers) == 0 && !c.isTaskAddedRecently() {
+					c.Stop()
+					break checkIdleLoop
+				}
+				checkIdleTaskListTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
+			}
+		}
+	}
+
+	checkIdleTaskListTimer.Stop()
+}
+
 func (c *taskListManagerImpl) getTasksPump() {
 	defer close(c.taskBuffer)
 	c.startWG.Wait()
 
 	go c.deliverBufferTasksForPoll()
 	updateAckTimer := time.NewTimer(c.config.UpdateAckInterval())
-	checkIdleTaskListTimer := time.NewTimer(c.config.IdleTasklistCheckInterval())
 getTasksPumpLoop:
 	for {
 		select {
@@ -798,19 +821,10 @@ getTasksPumpLoop:
 				c.signalNewTask() // periodically signal pump to check persistence for tasks
 				updateAckTimer = time.NewTimer(c.config.UpdateAckInterval())
 			}
-		case <-checkIdleTaskListTimer.C:
-			{
-				pollers := c.GetAllPollerInfo()
-				if len(pollers) == 0 && !c.isTaskAddedRecently() {
-					c.Stop()
-				}
-				checkIdleTaskListTimer = time.NewTimer(c.config.IdleTasklistCheckInterval())
-			}
 		}
 	}
 
 	updateAckTimer.Stop()
-	checkIdleTaskListTimer.Stop()
 }
 
 // Retry operation on transient error and on rangeID change. On rangeID update by another process calls c.Stop().
